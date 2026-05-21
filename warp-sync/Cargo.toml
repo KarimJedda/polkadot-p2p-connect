@@ -10,11 +10,21 @@ license = "MIT"
 path = "src/lib.rs"
 
 [[bin]]
-# Demo binary that warp-syncs Polkadot mainnet over TCP. Pulls in
-# tokio + tracing-subscriber + the bundled chainspec. Built by
-# default; downstream lib consumers ignore it.
+# Demo binary that warp-syncs Polkadot mainnet over TCP. Gated behind
+# the `bin` feature so library consumers don't transitively pull in
+# tokio + mio, which don't build for wasm32-unknown-unknown. Build it
+# with: `cargo run --features bin` or `cargo build -p warp-sync --bin
+# warp-sync --features bin`.
 name = "warp-sync"
 path = "src/main.rs"
+required-features = ["bin"]
+
+[features]
+default = []
+# Enables the tokio-driven demo binary. Off by default so the lib is
+# wasm-clean: bringing tokio in transitively pulls mio, which doesn't
+# build for wasm32-unknown-unknown.
+bin = ["dep:tokio", "dep:rand", "dep:tracing-subscriber"]
 
 [dependencies]
 # `path = "../"` because warp-sync now lives at the workspace root,
@@ -29,11 +39,14 @@ anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Binary-only deps. Kept under regular [dependencies] because cargo
-# requires the union to compile the bin target; downstream lib users
-# transitively pull them but the cost is negligible.
-tokio = { version = "1", features = ["full"] }
-rand = "0.8"
+# Required by the lib (grandpa.rs uses ed25519 verification + tracing
+# log facades). Both are wasm-compatible. `tracing-subscriber` is the
+# *initializer* and is binary-only — kept under [features].
 ed25519-dalek = "2"
-tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing = { version = "0.1", default-features = false }
+
+# Binary-only deps — marked `optional = true` and enabled only by the
+# `bin` feature.
+tokio = { version = "1", features = ["full"], optional = true }
+rand = { version = "0.8", optional = true }
+tracing-subscriber = { version = "0.3", optional = true }
