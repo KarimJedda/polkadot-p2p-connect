@@ -5,7 +5,10 @@ use crate::utils::{async_stream, varint};
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::future::Future;
 use core::mem;
+use core::pin::Pin;
+use core::task::{Context, Poll};
 use frame_buffer::MultistreamFrameBuffer;
 
 const LOG_TARGET: &str = "yamux_multistream";
@@ -16,6 +19,7 @@ pub use yamux::YamuxStreamId;
 
 const MULTISTREAM_PROTOCOL_NAME_WITH_NEWLINE: &[u8] = b"/multistream/1.0.0\n";
 const MULTISTREAM_PROTOCOL_MAX_LEN: usize = 1024;
+const WORK_UNITS_BEFORE_YIELD: usize = 64;
 
 pub struct YamuxMultistream<R, W> {
     inner: YamuxSession<R, W>,
@@ -233,16 +237,21 @@ impl<R: async_stream::AsyncRead + 'static, W: async_stream::AsyncWrite + 'static
     ///
     /// This function is cancel-safe.
     //
-    // Dev note: The cancel-safety is easily verifiable because next() calls next_inner() which
-    // has only one `.await` which calls the cancel-safe YamusSession::next(). Since no harm is done
-    // if we were to cancel and restart at this point (which is anyway at the start of the function),
-    // we can be confident that it is cancel-safe.
+    // Dev note: This is cancel-safe because bytes read before a cooperative yield are already
+    // stored in `self`'s per-stream buffers. Cancelling and restarting can delay an eventual
+    // output, but does not drop buffered protocol data.
     pub async fn next(&mut self) -> Option<Result<Output, Error>> {
         self.next_inner().await.transpose()
     }
 
     async fn next_inner(&mut self) -> Result<Option<Output>, Error> {
+        let mut work_units = 0usize;
         loop {
+            if work_units >= WORK_UNITS_BEFORE_YIELD {
+                YieldOnce::new().await;
+                work_units = 0;
+            }
+
             // If we have recently taken some bytes in on a stream, we try to parse/drain more messages
             // from the same buffer until it's empty. Else, we ask for more bytes from our Yamux layer below.
             let (stream_id, entry) = if let Some(stream_id) = self.read_from_stream_buffer.take() {
@@ -259,6 +268,7 @@ impl<R: async_stream::AsyncRead + 'static, W: async_stream::AsyncWrite + 'static
                     Some(Err(e)) => return Err(Error::Yamux(e)),
                     None => return Ok(None),
                 };
+                work_units += 1;
 
                 let entry = match state {
                     yamux::OutputState::OpenedByRemote => {
@@ -322,6 +332,7 @@ impl<R: async_stream::AsyncRead + 'static, W: async_stream::AsyncWrite + 'static
             // Pull the next message from the message buffer, looping if nothing ready yet.
             let byte_iter = match entry.buffer.next() {
                 Some(Ok(iter)) => {
+                    work_units += 1;
                     // We've seen a message! This means there could be other messages
                     // to follow. So, set `read_from_stream_buffer` to ensure that, if
                     // this is the case, we will read them all before taking more input
@@ -475,6 +486,30 @@ impl<R: async_stream::AsyncRead + 'static, W: async_stream::AsyncWrite + 'static
     }
 }
 
+struct YieldOnce {
+    yielded: bool,
+}
+
+impl YieldOnce {
+    fn new() -> Self {
+        Self { yielded: false }
+    }
+}
+
+impl Future for YieldOnce {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        if self.yielded {
+            Poll::Ready(())
+        } else {
+            self.yielded = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    }
+}
+
 /// Do two iterators have identical contents?
 fn iters_equal(mut a: impl Iterator<Item = u8>, mut b: impl Iterator<Item = u8>) -> bool {
     loop {
@@ -535,10 +570,14 @@ mod test {
     }
 
     fn next_expecting_output(yamux: &mut YamuxMultistream<MockStream, MockStream>) -> Output {
-        block_on(yamux.next())
-            .expect("expecting Ready, not Pending, from YamuxMultistream::next()")
-            .expect("output should not be None")
-            .expect("output should not be Err")
+        for _ in 0..10_000 {
+            if let Some(output) = block_on(yamux.next()) {
+                return output
+                    .expect("output should not be None")
+                    .expect("output should not be Err");
+            }
+        }
+        panic!("expecting Ready, not Pending, from YamuxMultistream::next()")
     }
 
     fn next_yamux_header(handle: &mut MockStreamHandle) -> YamuxHeader {

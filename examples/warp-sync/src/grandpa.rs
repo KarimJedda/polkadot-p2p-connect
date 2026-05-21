@@ -13,6 +13,8 @@ pub struct GrandpaState {
     pub finalized_number: u32,
     /// The block hash of the finalized block. At genesis this is the genesis hash.
     pub finalized_hash: BlockHash,
+    /// The state root of the finalized block.
+    pub finalized_state_root: Hash,
 }
 
 /// The ed25519 public key for an authority.
@@ -96,6 +98,7 @@ impl GrandpaState {
         }
 
         self.finalized_hash = header_hash;
+        self.finalized_state_root = header.state_root;
         self.finalized_number = header.number;
         if let Some(authorities) = new_authorities {
             // Authority set change means we increment the set ID.

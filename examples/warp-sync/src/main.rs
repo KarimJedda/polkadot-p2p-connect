@@ -1,3 +1,4 @@
+mod checkpoint;
 mod grandpa;
 mod polkadot;
 
@@ -11,8 +12,7 @@ use polkadot_p2p_connect::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-use grandpa::GrandpaState;
-use polkadot::{GENESIS_AUTHORITIES, GENESIS_HASH};
+use polkadot::GENESIS_HASH;
 
 /// Provide a tokio-based [`AsyncRead`] implementation.
 struct TokioTcpReader(tokio::net::tcp::OwnedReadHalf);
@@ -86,13 +86,9 @@ async fn main() -> anyhow::Result<()> {
             .with_timeout(Duration::from_secs(60)),
     );
 
-    // Initialize GRANDPA state from genesis.
-    let mut grandpa_state = GrandpaState {
-        authorities: GENESIS_AUTHORITIES.to_vec(),
-        set_id: 0,
-        finalized_number: 0,
-        finalized_hash: GENESIS_HASH,
-    };
+    // Initialize GRANDPA state from the bundled chainspec checkpoint
+    // (lightSyncState) so we skip the slow walk from block 0.
+    let mut grandpa_state = checkpoint::load()?;
 
     let bootnodes = [
         ("polkadot-bootnode-1.polkadot.io", 30333),
@@ -172,9 +168,10 @@ async fn main() -> anyhow::Result<()> {
 
                     if is_finished {
                         eprintln!(
-                            "Warp sync complete! Finalized block #{}, hash=0x{}",
+                            "Warp sync complete! Finalized block #{}, hash=0x{}, state_root=0x{}",
                             grandpa_state.finalized_number,
                             hex::encode(grandpa_state.finalized_hash),
+                            hex::encode(grandpa_state.finalized_state_root),
                         );
                         return Ok(());
                     }
