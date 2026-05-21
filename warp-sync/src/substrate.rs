@@ -1,15 +1,15 @@
-//! Hardcoded configuration and types for the Polkadot Relay Chain.
+//! Generic Substrate block header / digest types and the GRANDPA
+//! consensus-engine ID. These are chain-agnostic — Polkadot, Kusama,
+//! Paseo, AssetHub etc. all share this wire format. Chain-specific
+//! constants (genesis hashes, bootnodes) belong in the consumer.
 
 use parity_scale_codec::{Decode, Encode};
-
-/// Polkadot genesis hash.
-pub const GENESIS_HASH: [u8; 32] =
-    hex_literal::hex!("91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3");
 
 pub type BlockHash = [u8; 32];
 pub type Hash = [u8; 32];
 
-/// Polkadot block headers.
+/// Substrate block header — `parent_hash` + compact `number` + `state_root`
+/// + `extrinsics_root` + `digest`. Hashable via blake2b-256.
 #[derive(Clone, Debug, Encode, Decode)]
 pub struct BlockHeader {
     pub parent_hash: BlockHash,
@@ -47,7 +47,8 @@ pub enum BlockDigestItem {
     RuntimeEnvironmentUpdated,
 }
 
-/// Consensus engine ID.
+/// Four-byte consensus engine identifier present in digest items.
+/// Substrate convention: `b"FRNK"` is GRANDPA, `b"BABE"` is BABE, etc.
 #[derive(Clone, Copy, Debug, Encode, Decode)]
 pub struct ConsensusEngineId([u8; 4]);
 

@@ -1,4 +1,4 @@
-use crate::polkadot::{BlockDigestItem, BlockHash, BlockHeader, Hash};
+use crate::substrate::{BlockDigestItem, BlockHash, BlockHeader, Hash};
 use parity_scale_codec::{Decode, Encode};
 use std::collections::{HashMap, HashSet};
 
@@ -303,7 +303,7 @@ struct SignerPayload {
 // The shape of the bytes we receive when asking for warp sync details.
 mod wire_format {
     use super::AuthorityId;
-    use crate::polkadot::{BlockHash, BlockHeader};
+    use crate::substrate::{BlockHash, BlockHeader};
     use parity_scale_codec::{Decode, Encode};
 
     #[derive(Encode, Decode, Debug)]

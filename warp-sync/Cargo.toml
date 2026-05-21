@@ -1,0 +1,39 @@
+[package]
+name = "warp-sync"
+version = "0.1.0"
+edition = "2024"
+description = "Trustless GRANDPA warp-sync building blocks for Substrate-based chains."
+license = "MIT"
+
+[lib]
+# Library API for downstream crates (microdot, app code).
+path = "src/lib.rs"
+
+[[bin]]
+# Demo binary that warp-syncs Polkadot mainnet over TCP. Pulls in
+# tokio + tracing-subscriber + the bundled chainspec. Built by
+# default; downstream lib consumers ignore it.
+name = "warp-sync"
+path = "src/main.rs"
+
+[dependencies]
+# `path = "../"` because warp-sync now lives at the workspace root,
+# one level above polkadot-p2p-connect's Cargo.toml.
+polkadot-p2p-connect = { path = ".." }
+
+parity-scale-codec = { version = "3", features = ["derive"] }
+blake2 = "0.10"
+hex = "0.4"
+hex-literal = "0.4"
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Binary-only deps. Kept under regular [dependencies] because cargo
+# requires the union to compile the bin target; downstream lib users
+# transitively pull them but the cost is negligible.
+tokio = { version = "1", features = ["full"] }
+rand = "0.8"
+ed25519-dalek = "2"
+tracing = "0.1"
+tracing-subscriber = "0.3"

@@ -1,6 +1,7 @@
-mod checkpoint;
-mod grandpa;
-mod polkadot;
+//! Demo binary: warp-sync Polkadot mainnet over TCP from a bundled
+//! `lightSyncState` checkpoint. Library consumers should depend on
+//! `warp-sync` and use `warp_sync::*` directly; this binary just shows
+//! the wire-up against tokio + a hardcoded relay chain.
 
 use core::pin::Pin;
 use core::time::Duration;
@@ -12,7 +13,15 @@ use polkadot_p2p_connect::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-use polkadot::GENESIS_HASH;
+use warp_sync::{checkpoint, GrandpaState};
+
+/// Polkadot relay-chain genesis hash. Only the binary needs this; the
+/// library is chain-agnostic.
+const GENESIS_HASH: [u8; 32] =
+    hex_literal::hex!("91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3");
+
+/// Bundled Polkadot mainnet checkpoint snapshot.
+const LIGHT_SYNC_STATE_JSON: &str = include_str!("../polkadot-lightsync.json");
 
 /// Provide a tokio-based [`AsyncRead`] implementation.
 struct TokioTcpReader(tokio::net::tcp::OwnedReadHalf);
@@ -88,7 +97,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize GRANDPA state from the bundled chainspec checkpoint
     // (lightSyncState) so we skip the slow walk from block 0.
-    let mut grandpa_state = checkpoint::load()?;
+    let mut grandpa_state: GrandpaState = checkpoint::load(LIGHT_SYNC_STATE_JSON)?;
 
     let bootnodes = [
         ("polkadot-bootnode-1.polkadot.io", 30333),

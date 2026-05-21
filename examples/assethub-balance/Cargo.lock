@@ -405,6 +405,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "warp-sync",
 ]
 
 [[package]]
@@ -2901,6 +2902,25 @@ dependencies = [
  "ark-transcript",
  "w3f-pcs",
  "w3f-plonk-common",
+]
+
+[[package]]
+name = "warp-sync"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blake2",
+ "ed25519-dalek",
+ "hex",
+ "hex-literal",
+ "parity-scale-codec",
+ "polkadot-p2p-connect",
+ "rand",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

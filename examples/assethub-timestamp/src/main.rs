@@ -1,5 +1,3 @@
-mod checkpoint;
-mod grandpa;
 mod polkadot;
 
 use anyhow::Context;
@@ -16,8 +14,14 @@ use sp_state_machine::read_proof_check;
 use sp_trie::CompactProof;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
+use warp_sync::{BlockHeader, checkpoint};
 
-use polkadot::{ASSETHUB_GENESIS_HASH, ASSETHUB_PARA_ID, BlockHeader, GENESIS_HASH};
+use polkadot::{ASSETHUB_GENESIS_HASH, ASSETHUB_PARA_ID, GENESIS_HASH};
+
+/// Bundled Polkadot relay-chain checkpoint (the `lightSyncState` block
+/// from a polkadot raw chain-spec). The example warp-syncs the relay
+/// chain from here before reading AssetHub state on top.
+const LIGHT_SYNC_STATE_JSON: &str = include_str!("../../../warp-sync/polkadot-lightsync.json");
 
 /// Provide a tokio-based [`AsyncRead`] implementation.
 struct TokioTcpReader(tokio::net::tcp::OwnedReadHalf);
@@ -131,7 +135,7 @@ async fn learn_assethub_head() -> anyhow::Result<([u8; 32], u32, [u8; 32])> {
             .with_timeout(Duration::from_secs(60)),
     );
 
-    let mut grandpa_state = checkpoint::load()?;
+    let mut grandpa_state = checkpoint::load(LIGHT_SYNC_STATE_JSON)?;
     eprintln!(
         "[relay] starting from checkpoint #{} hash=0x{}",
         grandpa_state.finalized_number,

@@ -1,11 +1,13 @@
-//! Load a GRANDPA bootstrap checkpoint from a Polkadot sync spec's `lightSyncState` field.
+//! Load a GRANDPA bootstrap checkpoint from a Substrate sync spec's
+//! `lightSyncState` block. The caller supplies the JSON — either the
+//! `lightSyncState` object on its own (as produced by some tooling) or
+//! a full chain-spec document with a `lightSyncState` key (the shape
+//! emitted by `chain-spec-builder`).
 
 use crate::grandpa::{AuthorityId, GrandpaState};
-use crate::polkadot::BlockHeader;
+use crate::substrate::BlockHeader;
 use parity_scale_codec::Decode;
 use serde::Deserialize;
-
-const LIGHT_SYNC_STATE_JSON: &str = include_str!("../polkadot-lightsync.json");
 
 #[derive(Deserialize)]
 struct LightSyncState {
@@ -35,8 +37,18 @@ struct AuthoritySetPrefix {
     set_id: u64,
 }
 
-pub fn load() -> anyhow::Result<GrandpaState> {
-    let lss: LightSyncState = serde_json::from_str(LIGHT_SYNC_STATE_JSON)?;
+/// Parse a `lightSyncState` JSON document and return the GRANDPA state
+/// it encodes. Accepts either the bare `lightSyncState` object or a
+/// full chain-spec JSON with a top-level `lightSyncState` key.
+pub fn load(json: &str) -> anyhow::Result<GrandpaState> {
+    let value: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| anyhow::anyhow!("failed to parse JSON: {e}"))?;
+    let lss_value = match value.get("lightSyncState") {
+        Some(v) => v.clone(),
+        None => value,
+    };
+    let lss: LightSyncState = serde_json::from_value(lss_value)
+        .map_err(|e| anyhow::anyhow!("malformed lightSyncState: {e}"))?;
 
     let header = BlockHeader::decode(&mut &lss.finalized_block_header.0[..])
         .map_err(|e| anyhow::anyhow!("failed to decode finalizedBlockHeader: {e}"))?;

@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 polkadot-p2p-connect = { path = "../.." }
+warp-sync = { path = "../../warp-sync" }
 anyhow = "1"
 blake2 = "0.10"
 bs58 = "0.5"
